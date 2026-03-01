@@ -1,0 +1,9 @@
+[submodule "hotelMicro"]
+	path = hotelMicro
+	url = https://github.com/SosisterRapStar/hotelMicro.git
+[submodule "flightsMicro"]
+	path = flightsMicro
+	url = https://github.com/SosisterRapStar/flightsMicro.git
+[submodule "BookingMicroservice"]
+	path = BookingMicroservice
+	url = git@github.com:SosisterRapStar/BookingMicroservice.git
