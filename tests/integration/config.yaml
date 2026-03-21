@@ -1,0 +1,29 @@
+services:
+  booking:
+    address: "http://localhost:25025"
+
+  flights:
+    address: "http://localhost:25026"
+
+  hotels:
+    address: "http://localhost:25027"
+
+booking_db:
+  hosts: "localhost:5432"
+  dbname: "booking_db"
+  user: "postgres"
+  password: "postgres"
+  schema: ""
+
+flights_db:
+  hosts: "localhost:5435"
+  dbname: "flights_db"
+  user: "postgres"
+  password: "postgres"
+  schema: "flight"
+
+hotels_db:
+  hosts: "localhost:3306"
+  dbname: "hotels_db"
+  user: "mysql"
+  password: "mysql"
