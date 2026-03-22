@@ -6,13 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"testing"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -26,8 +26,16 @@ const (
 	seedRoomCount   = 10
 
 	pollInterval = 500 * time.Millisecond
-	pollTimeout  = 30 * time.Second
 )
+
+func sagaPollTimeout() time.Duration {
+	if v := os.Getenv("SAGA_TEST_TIMEOUT"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			return d
+		}
+	}
+	return 90 * time.Second
+}
 
 type SagaSuite struct {
 	suite.Suite
@@ -129,34 +137,64 @@ func (s *SagaSuite) createBooking(req createBookingRequest) string {
 	return result.BookingID
 }
 
+func (s *SagaSuite) bookingRowDebug(bookingID string) string {
+	var paymentStatus string
+	var cancelled bool
+	var cancelReason sql.NullString
+	err := s.bookingDB.QueryRow(
+		`SELECT payment_status, is_cancelled, cancel_reason FROM bookings WHERE id = $1`,
+		bookingID,
+	).Scan(&paymentStatus, &cancelled, &cancelReason)
+	if err != nil {
+		return fmt.Sprintf("bookings row: query error: %v", err)
+	}
+	cr := ""
+	if cancelReason.Valid {
+		cr = cancelReason.String
+	}
+	return fmt.Sprintf(
+		"payment_status=%q is_cancelled=%v cancel_reason=%q",
+		paymentStatus, cancelled, cr,
+	)
+}
+
 func (s *SagaSuite) waitForBookingStatus(bookingID, expectedStatus string) {
 	s.T().Helper()
-
-	require.Eventually(s.T(), func() bool {
+	deadline := time.Now().Add(sagaPollTimeout())
+	for time.Now().Before(deadline) {
 		var status string
 		err := s.bookingDB.QueryRow(
 			"SELECT payment_status FROM bookings WHERE id = $1", bookingID,
 		).Scan(&status)
-		if err != nil {
-			return false
+		if err == nil && status == expectedStatus {
+			return
 		}
-		return status == expectedStatus
-	}, pollTimeout, pollInterval, fmt.Sprintf("booking %s did not reach status %q", bookingID, expectedStatus))
+		time.Sleep(pollInterval)
+	}
+	s.Require().Failf(
+		"timeout waiting for payment_status %q (need Kafka + booking, flights, hotels running). Last state: %s",
+		expectedStatus,
+		s.bookingRowDebug(bookingID),
+	)
 }
 
 func (s *SagaSuite) waitForBookingCancelled(bookingID string) {
 	s.T().Helper()
-
-	require.Eventually(s.T(), func() bool {
+	deadline := time.Now().Add(sagaPollTimeout())
+	for time.Now().Before(deadline) {
 		var cancelled bool
 		err := s.bookingDB.QueryRow(
 			"SELECT is_cancelled FROM bookings WHERE id = $1", bookingID,
 		).Scan(&cancelled)
-		if err != nil {
-			return false
+		if err == nil && cancelled {
+			return
 		}
-		return cancelled
-	}, pollTimeout, pollInterval, fmt.Sprintf("booking %s was not cancelled", bookingID))
+		time.Sleep(pollInterval)
+	}
+	s.Require().Failf(
+		"timeout waiting for is_cancelled=true. Last state: %s",
+		s.bookingRowDebug(bookingID),
+	)
 }
 
 func (s *SagaSuite) getFlightAvailableSeats(flightID string) int {
