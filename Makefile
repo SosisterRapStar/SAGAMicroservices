@@ -6,7 +6,7 @@ BOOKING_MIGRATE_DSN  := postgres://postgres:postgres@localhost:5432/booking_db?s
 FLIGHTS_MIGRATE_DSN  := postgres://postgres:postgres@localhost:5435/flights_db?sslmode=disable&search_path=flight
 HOTELS_MIGRATE_DSN   := mysql://mysql:mysql@tcp(localhost:3306)/hotels_db
 
-.PHONY: help up infra migrate migrate-booking migrate-flights migrate-hotels run run-booking run-flights run-hotels down
+.PHONY: help up infra migrate migrate-booking migrate-flights migrate-hotels run run-booking run-flights run-hotels down test
 
 help:
 	@echo "Targets:"
@@ -14,6 +14,7 @@ help:
 	@echo "  make infra           — поднять только контейнеры (Postgres, MySQL, Kafka, Jaeger)"
 	@echo "  make migrate         — накатить миграции для всех сервисов"
 	@echo "  make run             — запустить все три сервиса"
+	@echo "  make test            — запустить интеграционные тесты"
 	@echo "  make down            — остановить контейнеры"
 
 infra:
@@ -55,6 +56,9 @@ run:
 	$(MAKE) run-flights & \
 	$(MAKE) run-hotels & \
 	wait
+
+test:
+	cd tests/integration && go test -v -timeout 120s ./...
 
 down:
 	docker compose down
